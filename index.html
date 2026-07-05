@@ -70,17 +70,31 @@
   .side{position:relative;display:flex;align-items:center;gap:14px;padding:6px 2px}
   .side .pick{flex:none}
   .lab{font-size:11px;letter-spacing:1.5px;color:var(--ink-soft);font-family:var(--mono);text-transform:uppercase;margin-bottom:7px}
-  select.ccysel{
-    appearance:none;-webkit-appearance:none;font-family:var(--sans);font-weight:700;font-size:16px;color:var(--ink);
-    background:#fff;border:1px solid var(--line);border-radius:11px;padding:11px 34px 11px 13px;cursor:pointer;outline:none;
+  .ccybox{position:relative}
+  input.ccyInput{
+    font-family:var(--sans);font-weight:700;font-size:15px;color:var(--ink);width:190px;
+    background:#fff;border:1px solid var(--line);border-radius:11px;padding:11px 34px 11px 13px;cursor:text;outline:none;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%231f5c4d' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat:no-repeat;background-position:right 12px center;min-width:190px;transition:border-color .15s
+    background-repeat:no-repeat;background-position:right 12px center;transition:border-color .15s
   }
-  select.ccysel:focus{border-color:var(--jade)}
+  input.ccyInput:focus{border-color:var(--jade)}
+  .ccyDrop{
+    display:none;position:absolute;z-index:20;top:calc(100% + 6px);left:0;width:260px;max-height:290px;overflow-y:auto;
+    background:#fffdf8;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 34px -16px rgba(18,58,48,.45);padding:6px
+  }
+  .ccyDrop.open{display:block}
+  .ccyGroup{font-family:var(--mono);font-size:10.5px;letter-spacing:1.5px;color:var(--gold);font-weight:700;
+    padding:8px 9px 4px;text-transform:uppercase}
+  .ccyItem{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:8px;cursor:pointer;font-size:13.5px}
+  .ccyItem:hover,.ccyItem.active{background:rgba(31,92,77,.10)}
+  .ccyItem .ccyFlag{font-size:15px}
+  .ccyItem .ccyName{flex:1;color:var(--ink)}
+  .ccyItem .ccyCode{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft)}
+  .ccyEmpty{padding:14px 10px;text-align:center;font-size:12.5px;color:var(--ink-soft)}
   .side .field{flex:1;text-align:right;min-width:0}
   .side input.amt{
     width:100%;text-align:right;border:none;background:transparent;font-family:var(--mono);font-weight:700;
-    font-size:30px;color:var(--ink);letter-spacing:.5px;outline:none
+    font-size:26px;white-space:nowrap;color:var(--ink);letter-spacing:.5px;outline:none
   }
   .side input.amt.result{color:var(--vermil)}
   .unit{font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:700;letter-spacing:2px;margin-top:2px;text-align:right}
@@ -150,8 +164,9 @@
   @media(max-width:520px){
     .side{flex-wrap:wrap}
     .side .field{width:100%;text-align:right}
-    .side input.amt{font-size:26px}
-    select.ccysel{min-width:100%}
+    .side input.amt{font-size:20px}
+    input.ccyInput{width:100%}
+    .ccyDrop{width:100%}
   }
 </style>
 </head>
@@ -173,14 +188,17 @@
     <button class="refresh" id="refreshBtn">
       <span class="spin"></span><span id="refreshTxt">更新即時匯率</span>
     </button>
-    <span class="hint">兩邊都可選幣別、輸入金額即時互算；按中間圓鈕可對調兩邊幣別。</span>
+    <span class="hint">來源與結果都可直接輸入幣別代碼或中文名稱搜尋，也可從清單點選；中間圓鈕可對調兩邊幣別。</span>
   </div>
 
   <div class="card">
     <div class="side">
       <div class="pick">
         <div class="lab">換算來源</div>
-        <select id="ccyFrom" class="ccysel" aria-label="選擇來源幣別"></select>
+        <div class="ccybox">
+          <input type="text" id="ccyFromInput" class="ccyInput" autocomplete="off" spellcheck="false" placeholder="輸入代碼或名稱" aria-label="輸入或選擇來源幣別">
+          <div class="ccyDrop" id="ccyFromDrop"></div>
+        </div>
       </div>
       <div class="field">
         <input class="amt" id="amtInput" type="text" inputmode="decimal" value="100" aria-label="來源金額">
@@ -199,7 +217,10 @@
     <div class="side">
       <div class="pick">
         <div class="lab">換算結果</div>
-        <select id="ccyTo" class="ccysel" aria-label="選擇結果幣別"></select>
+        <div class="ccybox">
+          <input type="text" id="ccyToInput" class="ccyInput" autocomplete="off" spellcheck="false" placeholder="輸入代碼或名稱" aria-label="輸入或選擇結果幣別">
+          <div class="ccyDrop" id="ccyToDrop"></div>
+        </div>
       </div>
       <div class="field">
         <input class="amt result" id="resultInput" type="text" inputmode="decimal" value="0" aria-label="結果金額">
@@ -242,22 +263,37 @@
 <script>
 (function(){
   const CCYS = [
-    {c:'TWD',n:'新台幣',f:'🇹🇼',dp:2},
-    {c:'USD',n:'美元',f:'🇺🇸',dp:2},{c:'EUR',n:'歐元',f:'🇪🇺',dp:2},{c:'JPY',n:'日圓',f:'🇯🇵',dp:0},
-    {c:'CNY',n:'人民幣',f:'🇨🇳',dp:2},{c:'HKD',n:'港幣',f:'🇭🇰',dp:2},{c:'GBP',n:'英鎊',f:'🇬🇧',dp:2},
-    {c:'AUD',n:'澳幣',f:'🇦🇺',dp:2},{c:'CHF',n:'瑞士法郎',f:'🇨🇭',dp:2},{c:'SGD',n:'新加坡幣',f:'🇸🇬',dp:2},
-    {c:'KRW',n:'韓元',f:'🇰🇷',dp:0},{c:'THB',n:'泰銖',f:'🇹🇭',dp:2},{c:'MYR',n:'馬來西亞令吉',f:'🇲🇾',dp:2},
-    {c:'PHP',n:'菲律賓披索',f:'🇵🇭',dp:2},{c:'IDR',n:'印尼盾',f:'🇮🇩',dp:0},{c:'VND',n:'越南盾',f:'🇻🇳',dp:0},
-    {c:'INR',n:'印度盧比',f:'🇮🇳',dp:2},{c:'CAD',n:'加幣',f:'🇨🇦',dp:2},{c:'NZD',n:'紐幣',f:'🇳🇿',dp:2},
-    {c:'ZAR',n:'南非幣',f:'🇿🇦',dp:2},{c:'MXN',n:'墨西哥披索',f:'🇲🇽',dp:2},{c:'BRL',n:'巴西雷亞爾',f:'🇧🇷',dp:2},
-    {c:'TRY',n:'土耳其里拉',f:'🇹🇷',dp:2},{c:'SEK',n:'瑞典克朗',f:'🇸🇪',dp:2},{c:'NOK',n:'挪威克朗',f:'🇳🇴',dp:2},
-    {c:'DKK',n:'丹麥克朗',f:'🇩🇰',dp:2},{c:'AED',n:'阿聯迪拉姆',f:'🇦🇪',dp:2},{c:'SAR',n:'沙烏地里亞爾',f:'🇸🇦',dp:2},
-    {c:'PLN',n:'波蘭茲羅提',f:'🇵🇱',dp:2},{c:'CZK',n:'捷克克朗',f:'🇨🇿',dp:2}
+    // 亞洲
+    {c:'TWD',n:'新台幣',f:'🇹🇼',dp:2,r:'亞洲'},
+    {c:'JPY',n:'日圓',f:'🇯🇵',dp:0,r:'亞洲'},{c:'CNY',n:'人民幣',f:'🇨🇳',dp:2,r:'亞洲'},
+    {c:'HKD',n:'港幣',f:'🇭🇰',dp:2,r:'亞洲'},{c:'KRW',n:'韓元',f:'🇰🇷',dp:0,r:'亞洲'},
+    {c:'SGD',n:'新加坡幣',f:'🇸🇬',dp:2,r:'亞洲'},{c:'THB',n:'泰銖',f:'🇹🇭',dp:2,r:'亞洲'},
+    {c:'MYR',n:'馬來西亞令吉',f:'🇲🇾',dp:2,r:'亞洲'},{c:'PHP',n:'菲律賓披索',f:'🇵🇭',dp:2,r:'亞洲'},
+    {c:'IDR',n:'印尼盾',f:'🇮🇩',dp:0,r:'亞洲'},{c:'VND',n:'越南盾',f:'🇻🇳',dp:0,r:'亞洲'},
+    {c:'INR',n:'印度盧比',f:'🇮🇳',dp:2,r:'亞洲'},
+    // 中東
+    {c:'AED',n:'阿聯迪拉姆',f:'🇦🇪',dp:2,r:'中東'},{c:'SAR',n:'沙烏地里亞爾',f:'🇸🇦',dp:2,r:'中東'},
+    {c:'TRY',n:'土耳其里拉',f:'🇹🇷',dp:2,r:'中東'},
+    // 歐洲
+    {c:'EUR',n:'歐元',f:'🇪🇺',dp:2,r:'歐洲'},{c:'GBP',n:'英鎊',f:'🇬🇧',dp:2,r:'歐洲'},
+    {c:'CHF',n:'瑞士法郎',f:'🇨🇭',dp:2,r:'歐洲'},{c:'SEK',n:'瑞典克朗',f:'🇸🇪',dp:2,r:'歐洲'},
+    {c:'NOK',n:'挪威克朗',f:'🇳🇴',dp:2,r:'歐洲'},{c:'DKK',n:'丹麥克朗',f:'🇩🇰',dp:2,r:'歐洲'},
+    {c:'PLN',n:'波蘭茲羅提',f:'🇵🇱',dp:2,r:'歐洲'},{c:'CZK',n:'捷克克朗',f:'🇨🇿',dp:2,r:'歐洲'},
+    // 美洲
+    {c:'USD',n:'美元',f:'🇺🇸',dp:2,r:'美洲'},{c:'CAD',n:'加幣',f:'🇨🇦',dp:2,r:'美洲'},
+    {c:'MXN',n:'墨西哥披索',f:'🇲🇽',dp:2,r:'美洲'},{c:'BRL',n:'巴西雷亞爾',f:'🇧🇷',dp:2,r:'美洲'},
+    // 非洲
+    {c:'ZAR',n:'南非幣',f:'🇿🇦',dp:2,r:'非洲'},{c:'MAD',n:'摩洛哥迪拉姆',f:'🇲🇦',dp:2,r:'非洲'},
+    {c:'EGP',n:'埃及鎊',f:'🇪🇬',dp:2,r:'非洲'},{c:'KES',n:'肯亞先令',f:'🇰🇪',dp:2,r:'非洲'},
+    {c:'TZS',n:'坦尚尼亞先令',f:'🇹🇿',dp:0,r:'非洲'},{c:'ETB',n:'衣索比亞比爾',f:'🇪🇹',dp:2,r:'非洲'},
+    {c:'NGN',n:'奈及利亞奈拉',f:'🇳🇬',dp:0,r:'非洲'},
+    // 大洋洲
+    {c:'AUD',n:'澳幣',f:'🇦🇺',dp:2,r:'大洋洲'},{c:'NZD',n:'紐幣',f:'🇳🇿',dp:2,r:'大洋洲'}
   ];
   const FB = {
     TWD:1,USD:31.60,EUR:35.85,JPY:0.1724,CNY:4.10,HKD:4.05,GBP:36.67,AUD:19.15,CHF:34.34,SGD:21.35,
     KRW:0.02026,THB:0.855,MYR:6.85,PHP:0.504,IDR:0.001755,VND:0.001240,INR:0.3224,CAD:22.30,
-    NZD:18.16,ZAR:1.856,MXN:1.768,BRL:6.19,TRY:0.6716,SEK:3.238,NOK:3.326,DKK:4.790,
+    NZD:18.16,ZAR:1.856,MAD:3.19,EGP:0.645,KES:0.245,TZS:0.01215,ETB:0.238,NGN:0.0204,MXN:1.768,BRL:6.19,TRY:0.6716,SEK:3.238,NOK:3.326,DKK:4.790,
     AED:8.605,SAR:8.427,PLN:8.470,CZK:1.475
   };
   const DEFAULT_PINNED = ['USD','JPY','EUR','CNY','HKD','KRW'];
@@ -270,7 +306,8 @@
 
   const $=id=>document.getElementById(id);
   const amtInput=$('amtInput'), resultInput=$('resultInput'),
-        ccyFrom=$('ccyFrom'), ccyTo=$('ccyTo'),
+        ccyFromInput=$('ccyFromInput'), ccyFromDrop=$('ccyFromDrop'),
+        ccyToInput=$('ccyToInput'), ccyToDrop=$('ccyToDrop'),
         rateInput=$('rateInput'), rateLine=$('rateLine'), rateUnit=$('rateUnit'),
         swapBtn=$('swapBtn'), fromUnit=$('fromUnit'), toUnit=$('toUnit'),
         editBtn=$('editBtn'), resetBtn=$('resetBtn'), editPanel=$('editPanel'),
@@ -288,20 +325,112 @@
   const fmtRate=v=>money(v,rateDp(v));
   const rate=()=> (twdPer[to]>0)? (twdPer[from]/twdPer[to]) : 0;
 
-  CCYS.forEach(o=>{
-    const label=`${o.f}  ${o.n}（${o.c}）`;
-    const a=document.createElement('option'); a.value=o.c; a.textContent=label; ccyFrom.appendChild(a);
-    const b=document.createElement('option'); b.value=o.c; b.textContent=label; ccyTo.appendChild(b);
+  // 自動縮字：數字太長時自動縮小到剛好放得下，避免在手機上被切掉
+  const baseMax=()=> window.innerWidth<=520 ? 20 : 26;
+  function fitOne(el){
+    if(!el || el.clientWidth<=0) return;
+    const max=baseMax(); el.style.fontSize=max+'px';
+    let size=max, guard=0;
+    while(el.scrollWidth>el.clientWidth && size>11 && guard<40){ size--; el.style.fontSize=size+'px'; guard++; }
+  }
+  function fitAll(){ fitOne(amtInput); fitOne(resultInput); }
+
+  const REGIONS = ['亞洲','中東','歐洲','美洲','非洲','大洋洲'];
+
+  function labelFor(code){ const m=META[code]; return m ? `${m.f} ${m.n}（${m.c}）` : ''; }
+
+  function filterList(query){
+    const q=query.trim().toLowerCase();
+    if(!q) return CCYS.slice();
+    return CCYS.filter(o=> o.c.toLowerCase().includes(q) || o.n.toLowerCase().includes(q) || o.r.toLowerCase().includes(q));
+  }
+
+  function closeDrop(dropEl){ dropEl.classList.remove('open'); dropEl.innerHTML=''; }
+
+  function renderDrop(dropEl, query, side){
+    const list=filterList(query);
+    dropEl.innerHTML='';
+    if(!list.length){
+      dropEl.innerHTML='<div class="ccyEmpty">找不到符合的幣別</div>';
+      dropEl.classList.add('open'); return;
+    }
+    let lastRegion=null;
+    list.forEach(o=>{
+      if(o.r!==lastRegion){
+        const h=document.createElement('div'); h.className='ccyGroup'; h.textContent=o.r;
+        dropEl.appendChild(h); lastRegion=o.r;
+      }
+      const item=document.createElement('div'); item.className='ccyItem'; item.dataset.code=o.c;
+      item.innerHTML=`<span class="ccyFlag">${o.f}</span><span class="ccyName">${o.n}</span><span class="ccyCode">${o.c}</span>`;
+      item.addEventListener('mousedown', e=>{ e.preventDefault(); selectCurrency(side, o.c); });
+      dropEl.appendChild(item);
+    });
+    dropEl.classList.add('open');
+  }
+
+  function moveActive(dropEl, dir){
+    const items=[...dropEl.querySelectorAll('.ccyItem')];
+    if(!items.length) return;
+    let idx=items.findIndex(it=>it.classList.contains('active'));
+    if(idx>=0) items[idx].classList.remove('active');
+    idx = idx<0 ? (dir>0?0:items.length-1) : (idx+dir+items.length)%items.length;
+    items[idx].classList.add('active');
+    items[idx].scrollIntoView({block:'nearest'});
+  }
+
+  function selectCurrency(side, code){
+    if(!META[code]) return;
+    if(side==='from'){
+      from=code; ccyFromInput.value=labelFor(code); closeDrop(ccyFromDrop);
+    }else{
+      to=code; ccyToInput.value=labelFor(code); closeDrop(ccyToDrop);
+    }
+    renderRate(); computeFromSource(); renderPinned();
+  }
+
+  function resolveTyped(inputEl, dropEl, side){
+    const query=inputEl.value.trim();
+    const codeGuess=query.toUpperCase();
+    if(META[codeGuess]){ selectCurrency(side, codeGuess); return; }
+    const list=filterList(query);
+    if(list.length===1){ selectCurrency(side, list[0].c); return; }
+    // 找不到唯一符合項目：還原為目前有效的幣別
+    inputEl.value=labelFor(side==='from'?from:to);
+    closeDrop(dropEl);
+  }
+
+  function wireCombo(inputEl, dropEl, side){
+    inputEl.addEventListener('focus', ()=>{ inputEl.select(); renderDrop(dropEl, '', side); });
+    inputEl.addEventListener('input', e=>{ renderDrop(dropEl, e.target.value, side); });
+    inputEl.addEventListener('keydown', e=>{
+      if(e.key==='Escape'){ inputEl.value=labelFor(side==='from'?from:to); closeDrop(dropEl); inputEl.blur(); return; }
+      if(e.key==='ArrowDown'){ e.preventDefault(); if(!dropEl.classList.contains('open')) renderDrop(dropEl, inputEl.value, side); moveActive(dropEl, 1); return; }
+      if(e.key==='ArrowUp'){ e.preventDefault(); moveActive(dropEl, -1); return; }
+      if(e.key==='Enter'){
+        e.preventDefault();
+        const activeEl=dropEl.querySelector('.ccyItem.active');
+        if(activeEl){ selectCurrency(side, activeEl.dataset.code); }
+        else{ resolveTyped(inputEl, dropEl, side); }
+      }
+    });
+    inputEl.addEventListener('blur', ()=>{
+      setTimeout(()=>{ if(dropEl.classList.contains('open')) resolveTyped(inputEl, dropEl, side); }, 120);
+    });
+  }
+  ccyFromInput.value=labelFor(from); ccyToInput.value=labelFor(to);
+  wireCombo(ccyFromInput, ccyFromDrop, 'from');
+  wireCombo(ccyToInput, ccyToDrop, 'to');
+  document.addEventListener('click', e=>{
+    if(!e.target.closest('.ccybox')){ closeDrop(ccyFromDrop); closeDrop(ccyToDrop); }
   });
-  ccyFrom.value=from; ccyTo.value=to;
 
   function renderRate(){
     fromUnit.textContent=from; toUnit.textContent=to;
     rateLine.innerHTML=`1 <b>${from}</b> = <b>${fmtRate(rate())}</b> ${to}`;
     rateInput.value=fmtRate(rate()); rateUnit.textContent=to;
   }
-  function computeFromSource(){ toAmt=fromAmt*rate(); resultInput.value=money(toAmt, META[to].dp); }
-  function computeFromResult(){ const r=rate(); fromAmt=r>0?toAmt/r:0; amtInput.value=money(fromAmt, META[from].dp); }
+  function computeFromSource(){ toAmt=fromAmt*rate(); resultInput.value=money(toAmt, META[to].dp); fitAll(); }
+  function computeFromResult(){ const r=rate(); fromAmt=r>0?toAmt/r:0; amtInput.value=money(fromAmt, META[from].dp); fitAll(); }
 
   function renderPinned(){
     const g=$('pgrid'); g.innerHTML='';
@@ -332,12 +461,9 @@
   function renderAll(){ renderRate(); computeFromSource(); renderPinned(); }
 
   amtInput.addEventListener('input',e=>{ fromAmt=parseNum(e.target.value); computeFromSource(); });
-  amtInput.addEventListener('blur',e=>{ e.target.value=money(fromAmt, META[from].dp); });
+  amtInput.addEventListener('blur',e=>{ e.target.value=money(fromAmt, META[from].dp); fitOne(amtInput); });
   resultInput.addEventListener('input',e=>{ toAmt=parseNum(e.target.value); computeFromResult(); });
-  resultInput.addEventListener('blur',e=>{ e.target.value=money(toAmt, META[to].dp); });
-
-  ccyFrom.addEventListener('change',e=>{ from=e.target.value; renderRate(); computeFromSource(); renderPinned(); });
-  ccyTo.addEventListener('change',e=>{ to=e.target.value; renderRate(); computeFromSource(); renderPinned(); });
+  resultInput.addEventListener('blur',e=>{ e.target.value=money(toAmt, META[to].dp); fitOne(resultInput); });
 
   rateInput.addEventListener('input',e=>{
     const x=parseNum(e.target.value);
@@ -348,7 +474,7 @@
 
   swapBtn.addEventListener('click',()=>{
     [from,to]=[to,from];
-    ccyFrom.value=from; ccyTo.value=to;
+    ccyFromInput.value=labelFor(from); ccyToInput.value=labelFor(to);
     swapBtn.classList.toggle('flip');
     fromAmt=toAmt;
     amtInput.value=money(fromAmt, META[from].dp);
@@ -404,6 +530,9 @@
     }
   }
   btn.addEventListener('click',fetchRates);
+
+  window.addEventListener('resize', fitAll);
+  window.addEventListener('load', fitAll);
 
   renderAll(); fetchRates();
 })();
